@@ -33,7 +33,8 @@ package org.omegat.util;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.IOException;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Paths;
 import java.util.Arrays;
 
 import javax.xml.bind.JAXBContext;
@@ -126,15 +127,8 @@ public class ProjectFileStorage {
                     om.getProject().getVersion()));
         }
 
-        // if folder is in default locations, name stored as __DEFAULT__
-        String m_root = projectDir.getAbsolutePath() + File.separator;
-
-        result.setTargetRootRelative(computeRelative(om.getProject().getTargetDir(), OConsts.DEFAULT_TARGET));
-        result.setTargetRoot(computeAbsolutePath(m_root, om.getProject().getTargetDir(),
-                OConsts.DEFAULT_TARGET));
-        result.setSourceRootRelative(computeRelative(om.getProject().getSourceDir(), OConsts.DEFAULT_SOURCE));
-        result.setSourceRoot(computeAbsolutePath(m_root, om.getProject().getSourceDir(),
-                OConsts.DEFAULT_SOURCE));
+        result.setTargetRoot(normalizePath(om.getProject().getTargetDir(), OConsts.DEFAULT_TARGET));
+        result.setSourceRoot(normalizePath(om.getProject().getSourceDir(), OConsts.DEFAULT_SOURCE));
         result.getSourceRootExcludes().clear();
         if (om.getProject().getSourceDirExcludes() != null) {
             result.getSourceRootExcludes().addAll(om.getProject().getSourceDirExcludes().getMask());
@@ -142,13 +136,9 @@ public class ProjectFileStorage {
             // sourceRootExclude was not defined
             result.getSourceRootExcludes().addAll(Arrays.asList(ProjectProperties.DEFAULT_EXCLUDES));
         }
-        result.setTMRoot(computeAbsolutePath(m_root, om.getProject().getTmDir(), OConsts.DEFAULT_TM));
-        result.setTMRootRelative(computeRelative(om.getProject().getTmDir(), OConsts.DEFAULT_TM));
+        result.setTMRoot(normalizePath(om.getProject().getTmDir(), OConsts.DEFAULT_TM));
 
-        result.setGlossaryRoot(computeAbsolutePath(m_root, om.getProject().getGlossaryDir(),
-                OConsts.DEFAULT_GLOSSARY));
-        result.setGlossaryRootRelative(computeRelative(om.getProject().getGlossaryDir(),
-                OConsts.DEFAULT_GLOSSARY));
+        result.setGlossaryRoot(normalizePath(om.getProject().getGlossaryDir(), OConsts.DEFAULT_GLOSSARY));
 
         // Compute glossary file location
         String glossaryFile = om.getProject().getGlossaryFile();
@@ -162,9 +152,8 @@ public class ProjectFileStorage {
         }
         result.setWriteableGlossary(glossaryFile);
 
-        result.setDictRoot(computeAbsolutePath(m_root, om.getProject().getDictionaryDir(),
+        result.setDictRoot(normalizePath(om.getProject().getDictionaryDir(),
                 OConsts.DEFAULT_DICT));
-        result.setDictRootRelative(computeRelative(om.getProject().getDictionaryDir(), OConsts.DEFAULT_DICT));
 
         result.setSourceLanguage(om.getProject().getSourceLang());
         result.setTargetLanguage(om.getProject().getTargetLang());
@@ -243,73 +232,15 @@ public class ProjectFileStorage {
         m.marshal(om, outFile);
     }
 
-    private static String computeRelative(String relativePath, String defaultName) {
-        if (DEFAULT_FOLDER_MARKER.equals(relativePath)) {
-            return asDirectory(defaultName);
+    private static String normalizePath(String path, String defaultValue) {
+        if (DEFAULT_FOLDER_MARKER.equals(path)) {
+            return defaultValue;
         } else {
-            return asDirectory(relativePath);
-        }
-    }
-
-    /**
-     * Constructs directory name like 'some/dir/'.
-     */
-    private static String asDirectory(String path) {
-        String r = path.replace(File.separatorChar, '/');
-        r = r.replaceAll("//+", "/");
-        if (r.startsWith("/")) {
-            r = r.substring(1);
-        }
-        if (!r.endsWith("")) {
-            r += "/";
-        }
-        return r;
-    }
-
-    /**
-     * Returns absolute path for any project's folder. Since 1.6.0 supports relative paths (RFE 1111956).
-     * 
-     * @param relativePath
-     *            relative path from project file.
-     * @param defaultName
-     *            default name for such a project's folder, if relativePath is "__DEFAULT__".
-     */
-    private static String computeAbsolutePath(String m_root, String relativePath, String defaultName) {
-        if (relativePath == null) {
-            // Not exist in project file ? Use default.
-            return m_root + defaultName + File.separator;
-        }
-        if (DEFAULT_FOLDER_MARKER.equals(relativePath))
-            return m_root + defaultName + File.separator;
-        else {
-            try {
-                // check if path starts with a system root
-                boolean startsWithRoot = false;
-                for (File root : File.listRoots()) {
-                    try // Under Windows and Java 1.4, there is an exception if
-                    { // using getCanonicalPath on a non-existent drive letter
-                      // [1875331] Relative paths not working under
-                      // Windows/Java 1.4
-                        String platformRelativePath = relativePath.replace('/', File.separatorChar);
-                        // If a plaform-dependent form of relativePath is not
-                        // used, startWith will always fail under Windows,
-                        // because Windows uses C:\, while the path is stored as
-                        // C:/ in omegat.project
-                        startsWithRoot = platformRelativePath.startsWith(root.getCanonicalPath());
-                    } catch (IOException e) {
-                        startsWithRoot = false;
-                    }
-                    if (startsWithRoot)
-                        // path starts with a root --> path is already absolute
-                        return new File(relativePath).getCanonicalPath() + File.separator;
-                }
-
-                // path does not start with a system root --> relative to
-                // project root
-                return new File(m_root, relativePath).getCanonicalPath() + File.separator;
-            } catch (IOException e) {
-                return relativePath;
+            path = path.replace('\\', '/');
+            if (!path.endsWith("/")) {
+                path += "/";
             }
+            return path;
         }
     }
 
@@ -323,52 +254,17 @@ public class ProjectFileStorage {
      *            default name for such a project's folder.
      * @since 1.6.0
      */
-    private static String computeRelativePath(String m_root, String absolutePath, String defaultName) {
-        if (defaultName != null && new File(absolutePath).equals(new File(m_root, defaultName))) {
+    private static String computeRelativePath(String root, String absolutePath, String defaultName) {
+        if (defaultName != null && new File(absolutePath).equals(new File(root, defaultName))) {
             return DEFAULT_FOLDER_MARKER;
         }
 
+        String result = absolutePath;
         try {
-            // trying to look two folders up
-            String res = absolutePath;
-            File abs = new File(absolutePath).getCanonicalFile();
-            File root = new File(m_root).getCanonicalFile();
-            String prefix = "";
-            //
-            // Try to derive the absolutePath as a relative path
-            // from root.
-            // First test whether the exact match is possible.
-            // Then on each try, one folder is moved up from the root.
-            //
-            // Currently, maximum MAX_PARENT_DIRECTORIES_ABS2REL levels up.
-            // More than these directory levels different seems to be that the paths
-            // were not intended to be related.
-            //
-            for (int i = 0; i <= OConsts.MAX_PARENT_DIRECTORIES_ABS2REL; i++) {
-                //
-                // File separator added to prevent "/MyProject EN-FR/"
-                // to be understood as being inside "/MyProject/" [1879571]
-                //
-                 if ((abs.getPath() + File.separator).startsWith(root.getPath() + File.separator)) {
-                     res = prefix + abs.getPath().substring(root.getPath().length());
-                     if (res.startsWith(File.separator))
-                        res = res.substring(1);
-                    break;
-                } else {
-                    root = root.getParentFile();
-                    prefix += File.separator + "..";
-                    //
-                    // There are no more parent paths.
-                    //
-                    if (root == null) {
-                      break;
-                    }
-                }
-            }
-            return res.replace(File.separatorChar, '/');
-        } catch (IOException e) {
-            return absolutePath.replace(File.separatorChar, '/');
+            result = Paths.get(root).relativize(Paths.get(absolutePath)).toString();
+        } catch (InvalidPathException e) {
         }
+        return result.replace('\\', '/');
     }
     
     /**
