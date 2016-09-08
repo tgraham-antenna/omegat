@@ -34,6 +34,7 @@ package org.omegat.util;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 
@@ -41,6 +42,7 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.Marshaller;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang.StringUtils;
 import org.omegat.core.data.ProjectProperties;
 import org.omegat.filters2.TranslationException;
 import org.omegat.filters2.master.PluginUtils;
@@ -74,6 +76,10 @@ public class ProjectFileStorage {
         } catch (Exception ex) {
             throw new ExceptionInInitializerError(ex);
         }
+    }
+
+    public static Omegat parseProjectFile(File file) throws Exception {
+        return parseProjectFile(FileUtils.readFileToByteArray(file));
     }
 
     public static Omegat parseProjectFile(byte[] projectFile) throws Exception {
@@ -113,13 +119,16 @@ public class ProjectFileStorage {
         if (!projectFile.isFile()) {
             throw new IllegalArgumentException("Project file was not a file");
         }
+        Omegat om = parseProjectFile(projectFile);
+        return loadPropertiesFile(projectDir, om);
+    }
+
+    static ProjectProperties loadPropertiesFile(File projectDir, Omegat om) throws Exception {
         if (!projectDir.isDirectory()) {
             throw new IllegalArgumentException("Project directory was not a directory");
         }
 
         ProjectProperties result = new ProjectProperties(projectDir);
-
-        Omegat om = parseProjectFile(FileUtils.readFileToByteArray(projectFile));
 
         if (!OConsts.PROJ_CUR_VERSION.equals(om.getProject().getVersion())) {
             throw new TranslationException(StringUtil.format(
@@ -127,8 +136,8 @@ public class ProjectFileStorage {
                     om.getProject().getVersion()));
         }
 
-        result.setTargetRoot(normalizePath(om.getProject().getTargetDir(), OConsts.DEFAULT_TARGET));
-        result.setSourceRoot(normalizePath(om.getProject().getSourceDir(), OConsts.DEFAULT_SOURCE));
+        result.setTargetRoot(normalizeLoadedPath(om.getProject().getTargetDir(), OConsts.DEFAULT_TARGET));
+        result.setSourceRoot(normalizeLoadedPath(om.getProject().getSourceDir(), OConsts.DEFAULT_SOURCE));
         result.getSourceRootExcludes().clear();
         if (om.getProject().getSourceDirExcludes() != null) {
             result.getSourceRootExcludes().addAll(om.getProject().getSourceDirExcludes().getMask());
@@ -136,9 +145,9 @@ public class ProjectFileStorage {
             // sourceRootExclude was not defined
             result.getSourceRootExcludes().addAll(Arrays.asList(ProjectProperties.DEFAULT_EXCLUDES));
         }
-        result.setTMRoot(normalizePath(om.getProject().getTmDir(), OConsts.DEFAULT_TM));
+        result.setTMRoot(normalizeLoadedPath(om.getProject().getTmDir(), OConsts.DEFAULT_TM));
 
-        result.setGlossaryRoot(normalizePath(om.getProject().getGlossaryDir(), OConsts.DEFAULT_GLOSSARY));
+        result.setGlossaryRoot(normalizeLoadedPath(om.getProject().getGlossaryDir(), OConsts.DEFAULT_GLOSSARY));
 
         // Compute glossary file location
         String glossaryFile = om.getProject().getGlossaryFile();
@@ -152,7 +161,7 @@ public class ProjectFileStorage {
         }
         result.setWriteableGlossary(glossaryFile);
 
-        result.setDictRoot(normalizePath(om.getProject().getDictionaryDir(),
+        result.setDictRoot(normalizeLoadedPath(om.getProject().getDictionaryDir(),
                 OConsts.DEFAULT_DICT));
 
         result.setSourceLanguage(om.getProject().getSourceLang());
@@ -186,33 +195,29 @@ public class ProjectFileStorage {
      */
     public static void writeProjectFile(ProjectProperties props) throws Exception {
         File outFile = new File(props.getProjectRoot(), OConsts.FILE_PROJECT);
-        String m_root = outFile.getAbsoluteFile().getParent() + File.separator;
+        String root = outFile.getAbsoluteFile().getParent();
 
         Omegat om = new Omegat();
         om.setProject(new Project());
         om.getProject().setVersion(OConsts.PROJ_CUR_VERSION);
 
-        om.getProject().setSourceDir(
-                computeRelativePath(m_root, props.getSourceRoot(), OConsts.DEFAULT_SOURCE));
+        om.getProject().setSourceDir(getPathForStoring(root, props.getSourceRoot(), OConsts.DEFAULT_SOURCE));
         om.getProject().setSourceDirExcludes(new Masks());
         om.getProject().getSourceDirExcludes().getMask().addAll(props.getSourceRootExcludes());
-        om.getProject().setTargetDir(
-                computeRelativePath(m_root, props.getTargetRoot(), OConsts.DEFAULT_TARGET));
-        om.getProject().setTmDir(computeRelativePath(m_root, props.getTMRoot(), OConsts.DEFAULT_TM));
-        om.getProject().setGlossaryDir(
-                computeRelativePath(m_root, props.getGlossaryRoot(), OConsts.DEFAULT_GLOSSARY));
+        om.getProject().setTargetDir(getPathForStoring(root, props.getTargetRoot(), OConsts.DEFAULT_TARGET));
+        om.getProject().setTmDir(getPathForStoring(root, props.getTMRoot(), OConsts.DEFAULT_TM));
+        String glossaryDir = getPathForStoring(root, props.getGlossaryRoot(), OConsts.DEFAULT_GLOSSARY);
+        om.getProject().setGlossaryDir(glossaryDir);
 
-        // Compute glossary file location
-        String glossaryFile = computeRelativePath(props.getGlossaryRoot(), props.getWriteableGlossary(), null); // Rel file name
-        String glossaryDir = computeRelativePath(m_root, props.getGlossaryRoot(), OConsts.DEFAULT_GLOSSARY);
+        // Compute glossary file location: must be relative to glossary root
+        String glossaryFile = getPathForStoring(props.getGlossaryRoot(), props.getWriteableGlossary(), null);
         if (glossaryDir.equalsIgnoreCase(DEFAULT_FOLDER_MARKER) && props.isDefaultWriteableGlossaryFile()) {
             // Everything equals to default
             glossaryFile = DEFAULT_FOLDER_MARKER;
         }
         om.getProject().setGlossaryFile(glossaryFile);
 
-        om.getProject().setDictionaryDir(
-                computeRelativePath(m_root, props.getDictRoot(), OConsts.DEFAULT_DICT));
+        om.getProject().setDictionaryDir(getPathForStoring(root, props.getDictRoot(), OConsts.DEFAULT_DICT));
         om.getProject().setSourceLang(props.getSourceLanguage().toString());
         om.getProject().setTargetLang(props.getTargetLanguage().toString());
         om.getProject().setSourceTok(props.getSourceTokenizer().getCanonicalName());
@@ -232,41 +237,63 @@ public class ProjectFileStorage {
         m.marshal(om, outFile);
     }
 
-    private static String normalizePath(String path, String defaultValue) {
+    private static String normalizeLoadedPath(String path, String defaultValue) {
         if (DEFAULT_FOLDER_MARKER.equals(path)) {
             return defaultValue;
         } else {
-            path = path.replace('\\', '/');
-            if (!path.endsWith("/")) {
-                path += "/";
-            }
-            return path;
+            return FileUtil.normalizeSlashes(path);
         }
     }
 
     /**
-     * Returns relative path for any project's folder. If absolutePath has default location, returns
-     * "__DEFAULT__".
+     * Converts a path to the format stored on disk. If
+     * <code>absolutePath</code> has the default location given by
+     * <code>root/defaultName</code>, returns <code>__DEFAULT__</code>.
+     * <p>
+     * Otherwise it attempts to compute a relative path based at
+     * <code>root</code>. If this isn't possible (e.g. the paths don't share a
+     * filesystem root) or if the relative path is more than
+     * {@link OConsts#MAX_PARENT_DIRECTORIES_ABS2REL} levels away then it gives
+     * up and returns the original <code>absolutePath</code>.
      * 
+     * @param root
+     *            Root path against which to evaluate
      * @param absolutePath
-     *            absolute path to project folder.
+     *            Absolute path to a folder
      * @param defaultName
-     *            default name for such a project's folder.
+     *            Default name for the folder
      * @since 1.6.0
+     * @see <a href=
+     *      "https://sourceforge.net/p/omegat/feature-requests/734/">RFE#734</a>
+     * @see OConsts#MAX_PARENT_DIRECTORIES_ABS2REL
      */
-    private static String computeRelativePath(String root, String absolutePath, String defaultName) {
+    private static String getPathForStoring(String root, String absolutePath, String defaultName) {
         if (defaultName != null && new File(absolutePath).equals(new File(root, defaultName))) {
             return DEFAULT_FOLDER_MARKER;
         }
 
+        // Fall back to using the input path if all else fails.
         String result = absolutePath;
         try {
-            result = Paths.get(root).relativize(Paths.get(absolutePath)).toString();
+            // Path.normalize() will resolve any remaining "../"
+            Path absPath = Paths.get(absolutePath).normalize();
+            String rel = Paths.get(root).relativize(absPath).toString();
+            if (StringUtils.countMatches(rel, "../") <= OConsts.MAX_PARENT_DIRECTORIES_ABS2REL) {
+                // Use the relativized path as it is "near" enough.
+                result = rel;
+            } else {
+                //
+                result = absPath.toString();
+            }
         } catch (InvalidPathException e) {
         }
-        return result.replace('\\', '/');
+        return FileUtil.normalizeSlashes(result);
     }
     
+    static String withTrailingSlash(String s) {
+        return s.endsWith("/") ? s : s + "/";
+    }
+
     /**
      * Load a tokenizer class from its canonical name.
      * @param className Name of tokenizer class

@@ -470,4 +470,18 @@ public class FileUtil {
         }
         return Pattern.compile(m.toString());
     }
+
+    /**
+     * Replace \ with / and add a / to the end if there isn't one already.
+     */
+    public static String normalizeSlashes(String path) {
+        return withTrailingSlash(path.replace('\\', '/'));
+    }
+
+    /**
+     * Add a / to the end if there isn't one already.
+     */
+    public static String withTrailingSlash(String path) {
+        return path.endsWith("/") ? path : path + '/';
+    }
 }
