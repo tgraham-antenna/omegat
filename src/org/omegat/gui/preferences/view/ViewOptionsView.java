@@ -21,7 +21,7 @@ public class ViewOptionsView implements PreferencesView {
 
     @Override
     public String toString() {
-        return "View Options";
+        return "View";
     }
 
     private void initGui() {
