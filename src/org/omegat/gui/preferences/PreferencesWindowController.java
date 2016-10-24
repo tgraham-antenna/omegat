@@ -40,7 +40,7 @@ public class PreferencesWindowController {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) panel.availablePrefsTree
                     .getLastSelectedPathComponent();
             if (node != null) {
-                if (currentView != null) {
+                if (currentView != null && !persistenceRunnables.containsKey(currentView.getClass().getName())) {
                     persistenceRunnables.put(currentView.getClass().getName(), currentView.getPersistenceLogic());
                 }
                 currentView = (PreferencesView) node.getUserObject();
