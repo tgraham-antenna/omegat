@@ -41,11 +41,22 @@ public class PreferencesWindowController {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) panel.availablePrefsTree
                     .getLastSelectedPathComponent();
             if (node != null) {
-                if (currentView != null && !persistenceRunnables.containsKey(currentView.getClass().getName())) {
-                    persistenceRunnables.put(currentView.getClass().getName(), currentView.getPersistenceLogic());
+                PreferencesView oldView = currentView;
+                PreferencesView newView = (PreferencesView) node.getUserObject();
+                if (oldView == newView || newView.equals(oldView)) {
+                    return;
                 }
-                currentView = (PreferencesView) node.getUserObject();
-                panel.selectedPrefsScrollPane.setViewportView(currentView.getGui());
+                if (oldView != null) {
+                    if (!oldView.validate()) {
+                        panel.availablePrefsTree.getSelectionModel().setSelectionPath(e.getOldLeadSelectionPath());
+                        return;
+                    }
+                    if (!persistenceRunnables.containsKey(oldView.getClass().getName())) {
+                        persistenceRunnables.put(oldView.getClass().getName(), oldView.getPersistenceLogic());
+                    }
+                }
+                panel.selectedPrefsScrollPane.setViewportView(newView.getGui());
+                currentView = newView;
             }
         });
         DefaultTreeCellRenderer renderer = (DefaultTreeCellRenderer) panel.availablePrefsTree.getCellRenderer();

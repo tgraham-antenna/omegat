@@ -8,4 +8,8 @@ public interface PreferencesView {
     Runnable getPersistenceLogic();
 
     void initDefaults();
+
+    default boolean validate() {
+        return true;
+    };
 }
