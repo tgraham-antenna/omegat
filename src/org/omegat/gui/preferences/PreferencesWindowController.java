@@ -15,6 +15,7 @@ import javax.swing.tree.TreeNode;
 
 import org.omegat.core.Core;
 import org.omegat.core.data.NotLoadedProject;
+import org.omegat.gui.preferences.view.TeamOptionsView;
 import org.omegat.gui.preferences.view.UserPassView;
 import org.omegat.gui.preferences.view.ViewOptionsView;
 import org.omegat.gui.preferences.view.WorkflowOptionsView;
@@ -72,6 +73,7 @@ public class PreferencesWindowController {
     public TreeNode getRootNode() {
         DefaultMutableTreeNode root = new DefaultMutableTreeNode();
         root.add(new DefaultMutableTreeNode(new WorkflowOptionsView()));
+        root.add(new DefaultMutableTreeNode(new TeamOptionsView()));
         root.add(new DefaultMutableTreeNode(new ViewOptionsView()));
         root.add(new DefaultMutableTreeNode(new UserPassView()));
         return root;
