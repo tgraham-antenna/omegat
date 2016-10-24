@@ -12,6 +12,7 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeNode;
+import javax.swing.tree.TreeSelectionModel;
 
 import org.omegat.core.Core;
 import org.omegat.core.data.NotLoadedProject;
@@ -36,6 +37,7 @@ public class PreferencesWindowController {
         PreferencesPanel panel = new PreferencesPanel();
         dialog.add(panel);
 
+        panel.availablePrefsTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         panel.availablePrefsTree.setModel(new DefaultTreeModel(getRootNode()));
         panel.availablePrefsTree.addTreeSelectionListener(e -> {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) panel.availablePrefsTree
